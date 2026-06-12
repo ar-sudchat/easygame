@@ -104,17 +104,31 @@ export class SelectScene extends Phaser.Scene {
     // ปุ่มเต็มจอ — เฉพาะจอสัมผัส (มือถือ/แท็บเล็ต) ช่วยซ่อนแถบเบราว์เซอร์ให้เล่นเต็มพื้นที่
     if (this.sys.game.device.input.touch && document.fullscreenEnabled) {
       const fsBtn = this.add
-        .text(30, 18, 'เต็มจอ ⛶', { fontFamily: FONT, fontSize: '15px', color: '#9ca3af' })
+        .text(24, 16, '⛶ เต็มจอ', { fontFamily: FONT, fontSize: '26px', color: '#ffd460' })
         .setOrigin(0, 0)
-        .setPadding(10, 6, 10, 6)
+        .setPadding(18, 12, 18, 12)
       fsBtn.setBackgroundColor('#1f2a40')
       fsBtn.setInteractive({ useHandCursor: true })
+      this.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => fsBtn.setText('⛶ ออกเต็มจอ'))
+      this.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => fsBtn.setText('⛶ เต็มจอ'))
+
+      // auto เต็มจอ: เบราว์เซอร์บังคับว่าต้องเกิดจากจังหวะผู้ใช้แตะจอ —
+      // เลยดักการแตะครั้งแรก (ครั้งเดียวต่อการเปิดหน้า) แตะอะไรก็ได้แล้วเข้าเต็มจอให้เอง
+      const autoFs = (_p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        if (over.includes(fsBtn)) return // แตะที่ปุ่มเอง ปล่อยให้ปุ่มจัดการ
+        this.input.off('pointerdown', autoFs)
+        this.registry.set('fsAutoDone', true)
+        if (!this.scale.isFullscreen) this.scale.startFullscreen()
+      }
+      if (!this.registry.get('fsAutoDone')) this.input.on('pointerdown', autoFs)
+
       fsBtn.on('pointerdown', () => {
         sfx(this, 'sfx-click')
+        // กดปุ่มเอง = ผู้ใช้เลือกแล้ว ปิด auto ถาวร (กันสลับกลับเองหลังกดออก)
+        this.registry.set('fsAutoDone', true)
+        this.input.off('pointerdown', autoFs)
         this.scale.toggleFullscreen()
       })
-      this.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => fsBtn.setText('ออกเต็มจอ ⛶'))
-      this.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => fsBtn.setText('เต็มจอ ⛶'))
     }
 
     this.input.keyboard!.on('keydown-LEFT', () =>
