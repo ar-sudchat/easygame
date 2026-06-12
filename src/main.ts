@@ -4,9 +4,13 @@ import { GameScene } from './scenes/GameScene'
 import { SelectScene } from './scenes/SelectScene'
 
 // ขนาดเกมอิงสัดส่วนจอจริง — มือถือจอกว้างจะไม่เหลือแถบดำข้างจอ
+// ใช้ด้านยาว/ด้านสั้นเสมอ (เกมเป็นแนวนอน) — กันเคสเปิดหน้าเว็บตอนมือถือยังหันแนวตั้งแล้วค่อยหมุน
 // สูงคงที่ 600 (พิกัด Y เดิมทั้งเกมใช้ได้) กว้างตามจอ: แคบสุด 4:3 (800) กว้างสุด 21:9 (1400)
 const HEIGHT = 600
-const aspect = Phaser.Math.Clamp(window.innerWidth / window.innerHeight, 4 / 3, 21 / 9)
+const landscapeRatio =
+  Math.max(window.innerWidth, window.innerHeight) /
+  Math.min(window.innerWidth, window.innerHeight)
+const aspect = Phaser.Math.Clamp(landscapeRatio, 4 / 3, 21 / 9)
 const WIDTH = Math.round((HEIGHT * aspect) / 2) * 2
 
 const game = new Phaser.Game({

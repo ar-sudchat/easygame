@@ -491,13 +491,14 @@ export class GameScene extends Phaser.Scene {
   private createHotbar() {
     const size = 46
     const W = this.scale.width
-    // จอสัมผัส: สกิลเรียงโค้งรอบปุ่มกระโดดมุมขวาล่าง (แบบ ROV นิ้วโป้งขวาเอื้อมถึงหมด)
+    const isTouch = this.sys.game.device.input.touch
+    // จอสัมผัส: สกิลปุ่มกลมเรียงโค้งรอบปุ่มกระโดดมุมขวาล่าง (แบบ ROV นิ้วโป้งขวาเอื้อมถึงหมด)
     // เดสก์ท็อป: แถวตรงกลางล่าง กดเลข 1-5
     const spots: { x: number; y: number }[] = []
-    if (this.sys.game.device.input.touch) {
+    if (isTouch) {
       const cx = W - 72
       const cy = 506
-      const r = 124
+      const r = 160 // ห่างพอให้ปุ่มไม่เกยกัน (ระยะตามโค้ง ~62px ต่อปุ่ม)
       for (let i = 0; i < 5; i++) {
         const ang = Math.PI + (i * (Math.PI / 2)) / 4 // กวาด 180° → 270° (ซ้ายของปุ่ม → เหนือปุ่ม)
         spots.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r })
@@ -510,20 +511,25 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < 5; i++) {
       const { x, y } = spots[i]
       const bg = this.hud(
-        this.add
-          .rectangle(x, y, size, size, 0x1f2a40, 0.85)
-          .setStrokeStyle(2, 0x4b5d7a),
+        isTouch
+          ? this.add.circle(x, y, 26, 0x1f2a40, 0.85).setStrokeStyle(2, 0x4b5d7a)
+          : this.add
+              .rectangle(x, y, size, size, 0x1f2a40, 0.85)
+              .setStrokeStyle(2, 0x4b5d7a),
       )
       bg.setInteractive({ useHandCursor: true })
       bg.on('pointerdown', () => this.useSlot(i))
-      this.hud(
-        this.add
-          .text(x - size / 2 + 5, y - size / 2 + 2, `${i + 1}`, {
-            fontFamily: FONT,
-            fontSize: '12px',
-            color: '#7d8db1',
-          }),
-      )
+      // เลขช่องโชว์เฉพาะเดสก์ท็อป (ไว้กดคีย์ 1-5) — จอสัมผัสแตะปุ่มตรง ๆ
+      if (!isTouch) {
+        this.hud(
+          this.add
+            .text(x - size / 2 + 5, y - size / 2 + 2, `${i + 1}`, {
+              fontFamily: FONT,
+              fontSize: '12px',
+              color: '#7d8db1',
+            }),
+        )
+      }
       const icon = this.hud(this.add.image(x, y, 'icon-speed').setVisible(false))
       this.slotIcons.push(icon)
     }
