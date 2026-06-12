@@ -100,6 +100,22 @@ export class SelectScene extends Phaser.Scene {
     muteBtn.on('pointerdown', flip)
     this.input.keyboard!.on('keydown-M', flip)
 
+    // ปุ่มเต็มจอ — เฉพาะจอสัมผัส (มือถือ/แท็บเล็ต) ช่วยซ่อนแถบเบราว์เซอร์ให้เล่นเต็มพื้นที่
+    if (this.sys.game.device.input.touch && document.fullscreenEnabled) {
+      const fsBtn = this.add
+        .text(30, 18, 'เต็มจอ ⛶', { fontFamily: FONT, fontSize: '15px', color: '#9ca3af' })
+        .setOrigin(0, 0)
+        .setPadding(10, 6, 10, 6)
+      fsBtn.setBackgroundColor('#1f2a40')
+      fsBtn.setInteractive({ useHandCursor: true })
+      fsBtn.on('pointerdown', () => {
+        sfx(this, 'sfx-click')
+        this.scale.toggleFullscreen()
+      })
+      this.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => fsBtn.setText('ออกเต็มจอ ⛶'))
+      this.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => fsBtn.setText('เต็มจอ ⛶'))
+    }
+
     this.input.keyboard!.on('keydown-LEFT', () =>
       this.select((this.index + PLAYABLE.length - 1) % PLAYABLE.length),
     )
