@@ -15,7 +15,7 @@ interface Pending {
 export class BoardScene extends Phaser.Scene {
   private pending?: Pending
   private rows: Phaser.GameObjects.GameObject[] = []
-  private nameInput?: Phaser.GameObjects.DOMElement
+  private nameInput?: HTMLDivElement
 
   constructor() {
     super('board')
@@ -109,19 +109,27 @@ export class BoardScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
 
-    this.nameInput = this.add.dom(cx, 495).createFromHTML(
-      `<div style="display:flex; gap:8px; align-items:center;">
-        <input id="player-name" maxlength="16" placeholder="ชื่อของคุณ" style="
-          width: 220px; height: 38px; padding: 0 12px; font-size: 18px;
-          font-family: ${FONT}; color: #fff; background: #1f2a40;
-          border: 1px solid #4ecca3; border-radius: 8px; outline: none; text-align: center;" />
-        <button id="save-name" style="
-          height: 40px; padding: 0 18px; font-size: 17px; font-family: ${FONT};
-          color: #0f172a; background: #4ecca3; border: none; border-radius: 8px;
-          cursor: pointer;">บันทึก</button>
-      </div>`,
-    )
-    const el = this.nameInput.getChildByID('player-name') as HTMLInputElement
+    // ช่องกรอกชื่อเป็น overlay ติดจอจริง (position:fixed กลางจอล่าง) — ไม่ใช้ DOM ของ Phaser
+    // เพราะตำแหน่งจะเพี้ยนหลุดจอเมื่อ canvas โดนย่อบนมือถือ/คีย์บอร์ดเด้งขึ้น
+    const wrap = document.createElement('div')
+    wrap.style.cssText =
+      'position:fixed; left:50%; bottom:10%; transform:translateX(-50%);' +
+      'display:flex; gap:10px; align-items:center; z-index:30;'
+    wrap.innerHTML = `
+      <input id="player-name" maxlength="16" placeholder="ชื่อของคุณ" autocomplete="off" style="
+        width: min(240px, 50vw); height: 46px; padding: 0 12px; font-size: 20px;
+        font-family: ${FONT}; color: #fff; background: #1f2a40;
+        border: 2px solid #4ecca3; border-radius: 10px; outline: none; text-align: center;" />
+      <button id="save-name" style="
+        height: 50px; padding: 0 22px; font-size: 19px; font-family: ${FONT};
+        color: #0f172a; background: #4ecca3; border: none; border-radius: 10px;
+        cursor: pointer;">บันทึก</button>`
+    document.body.appendChild(wrap)
+    this.nameInput = wrap
+    // ถ้าออกจาก scene ทางอื่น (เช่นเริ่มเกมใหม่) ต้องเก็บกวาด overlay ทิ้งด้วย
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => wrap.remove())
+
+    const el = wrap.querySelector('#player-name') as HTMLInputElement
     setTimeout(() => el?.focus(), 50)
 
     let saving = false
@@ -131,7 +139,7 @@ export class BoardScene extends Phaser.Scene {
       const name = (el?.value || '').trim() || 'ไม่ระบุชื่อ'
       const entry: BoardEntry = { name, score: pending.score, char: pending.char, stage: pending.stage }
       void saveEntry(entry).then(({ board, rank }) => {
-        this.nameInput?.destroy()
+        wrap.remove()
         this.nameInput = undefined
         this.pending = undefined
         if (!this.scene.isActive()) return
@@ -144,7 +152,7 @@ export class BoardScene extends Phaser.Scene {
       if (ev.key === 'Enter') submit()
       ev.stopPropagation() // กันปุ่มลามไปคุมเกม
     })
-    const saveBtn = this.nameInput.getChildByID('save-name') as HTMLButtonElement
+    const saveBtn = wrap.querySelector('#save-name') as HTMLButtonElement
     saveBtn?.addEventListener('click', submit)
   }
 
@@ -159,10 +167,16 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private showHint() {
+    const isTouch = this.sys.game.device.input.touch
     const btn = this.add
-      .text(this.scale.width / 2, 500, 'กลับหน้าเลือกตัวละคร (SPACE)', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' })
+      .text(
+        this.scale.width / 2,
+        500,
+        isTouch ? 'กลับหน้าเลือกตัวละคร' : 'กลับหน้าเลือกตัวละคร (SPACE)',
+        { fontFamily: FONT, fontSize: isTouch ? '26px' : '18px', color: '#ffd460' },
+      )
       .setOrigin(0.5)
-      .setPadding(14, 8, 14, 8)
+      .setPadding(18, 12, 18, 12)
     btn.setBackgroundColor('#1f2a40')
     btn.setInteractive({ useHandCursor: true })
     btn.on('pointerdown', () => {
