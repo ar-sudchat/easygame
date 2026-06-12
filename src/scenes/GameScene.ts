@@ -92,6 +92,7 @@ export class GameScene extends Phaser.Scene {
   private chests!: Phaser.Physics.Arcade.Group
   private powerBoxes!: Phaser.Physics.Arcade.Group
   private rewardBoxes!: Phaser.Physics.Arcade.Group
+  private x2Tokens!: Phaser.Physics.Arcade.Group
   private enemies!: Phaser.Physics.Arcade.Group
   private bullets!: Phaser.Physics.Arcade.Group
   private obstacles!: Phaser.Physics.Arcade.StaticGroup
@@ -108,6 +109,9 @@ export class GameScene extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics
 
   private score = 0
+  // เก็บเหรียญ ×2 แล้วคะแนนทุกทางคูณ 2 จนถึงเวลานี้
+  private scoreMultUntil = 0
+  private multText!: Phaser.GameObjects.Text
   private hp = MAX_HP
   private stage = 1
   private stageStart = 0
@@ -179,9 +183,11 @@ export class GameScene extends Phaser.Scene {
     for (let i = 1; i <= 3; i++)
       this.textures.get(`tuft${i}`).setFilter(Phaser.Textures.FilterMode.LINEAR)
 
+    this.scoreMultUntil = 0
     this.makeBulletTexture()
     this.makePowerBoxTexture()
     this.makeRewardBoxTexture()
+    this.makeX2Texture()
     this.makePowerIcons()
     this.makeArrowTexture()
     this.makeGroundTextures()
@@ -246,6 +252,17 @@ export class GameScene extends Phaser.Scene {
 
     this.rewardBoxes = this.physics.add.group()
 
+    this.x2Tokens = this.physics.add.group()
+    this.physics.add.overlap(this.player, this.x2Tokens, (_p, t) => {
+      const token = t as Phaser.Types.Physics.Arcade.ImageWithDynamicBody
+      this.tweens.killTweensOf(token)
+      token.destroy()
+      sfx(this, 'sfx-powerbox', 0.5)
+      voice(this, 'power')
+      this.scoreMultUntil = this.time.now + 20000
+      this.floatText(this.player.x, this.player.y - this.player.displayHeight / 2 - 40, 'คะแนน ×2!', '#ff8ad8', 24)
+    })
+
     this.enemies = this.physics.add.group()
     for (let i = 0; i < 7; i++) this.spawnEnemy()
 
@@ -275,12 +292,10 @@ export class GameScene extends Phaser.Scene {
     })
 
     this.physics.add.overlap(this.player, this.chests, (_p, chest) => {
-      const pts = this.rush ? 20 : 10 // RUSH ได้ ×2
+      const pts = this.addScore(this.rush ? 20 : 10) // RUSH ×2 · เหรียญ ×2 คูณซ้อนได้อีก
       this.floatText((chest as Phaser.GameObjects.Image).x, (chest as Phaser.GameObjects.Image).y - 18, `+${pts}`, '#ffd460', 15)
       chest.destroy()
       sfx(this, 'sfx-chest', 0.45)
-      this.score += pts
-      this.scoreText.setText(`สมบัติ: ${this.score}`)
       this.spawnChest()
     })
 
@@ -349,6 +364,9 @@ export class GameScene extends Phaser.Scene {
     )
     this.powerText = this.hud(
       this.add.text(16, 40, '', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' }),
+    )
+    this.multText = this.hud(
+      this.add.text(16, 66, '', { fontFamily: FONT, fontSize: '18px', color: '#ff8ad8' }),
     )
     const hudCx = this.scale.width / 2
     this.stageText = this.hud(
@@ -441,12 +459,11 @@ export class GameScene extends Phaser.Scene {
     const coin = this.skyCoins[i]
     this.skyCoins.splice(i, 1)
     this.tweens.killTweensOf(coin.img)
-    this.floatText(coin.gx, coin.gy - COIN_FLOAT_Z - 12, `+${COIN_SCORE}`, '#ffd460', 15)
+    const pts = this.addScore(COIN_SCORE)
+    this.floatText(coin.gx, coin.gy - COIN_FLOAT_Z - 12, `+${pts}`, '#ffd460', 15)
     coin.img.destroy()
     coin.shadow.destroy()
     sfx(this, 'sfx-chest', 0.4)
-    this.score += COIN_SCORE
-    this.scoreText.setText(`สมบัติ: ${this.score}`)
     this.time.delayedCall(6000, () => !this.gameOver && this.spawnSkyCoin())
   }
 
@@ -691,6 +708,29 @@ export class GameScene extends Phaser.Scene {
     ctx.beginPath()
     ctx.arc(W / 2, 8, 4, 0, Math.PI * 2)
     ctx.fill()
+    c.refresh()
+  }
+
+  /** เหรียญตัวคูณ ×2 — เหรียญทองตัวหนังสือ ×2 */
+  private makeX2Texture() {
+    if (this.textures.exists('x2')) return
+    const S = 44
+    const c = this.textures.createCanvas('x2', S, S)!
+    const ctx = c.getContext()
+    ctx.fillStyle = '#ffd460'
+    ctx.beginPath()
+    ctx.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#b45309'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(S / 2, S / 2, S / 2 - 3.5, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = '#7c2d12'
+    ctx.font = `bold 20px ${FONT}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('×2', S / 2, S / 2 + 1)
     c.refresh()
   }
 
@@ -977,6 +1017,44 @@ export class GameScene extends Phaser.Scene {
     for (const delay of [Phaser.Math.Between(10000, 55000), Phaser.Math.Between(62000, 105000)]) {
       this.hazardEvents.push(this.time.addEvent({ delay, callback: () => this.dropRewardBox() }))
     }
+
+    // เหรียญ ×2 หล่นเป็นระยะ — เก็บแล้วคะแนนทุกทางคูณ 2 นาน 20 วิ
+    this.hazardEvents.push(
+      this.time.addEvent({
+        delay: Phaser.Math.Between(22000, 32000),
+        loop: true,
+        callback: () => this.dropX2(),
+      }),
+    )
+  }
+
+  /** เหรียญ ×2 หล่นจากฟ้า — อยู่บนพื้น 12 วิแล้วหาย (กะพริบเตือนช่วงท้าย) */
+  private dropX2() {
+    if (this.gameOver) return
+    const tx = Phaser.Math.Clamp(this.player.x + Phaser.Math.Between(-260, 260), 60, WORLD_W - 60)
+    const ty = Phaser.Math.Clamp(this.player.y + Phaser.Math.Between(-180, 180), 60, WORLD_H - 60)
+    const shadow = this.add.ellipse(tx, ty, 14, 9, 0x000000, 0.3).setDepth(ty - 1)
+    this.tweens.add({ targets: shadow, scaleX: 3, scaleY: 3, duration: 900 })
+    const falling = this.add.image(tx, ty - 480, 'x2').setDepth(99999)
+    this.tweens.add({
+      targets: falling,
+      y: ty - 8,
+      duration: 900,
+      ease: 'Quad.in',
+      onComplete: () => {
+        shadow.destroy()
+        falling.destroy()
+        if (this.gameOver) return
+        sfx(this, 'sfx-chest', 0.35)
+        const token = this.x2Tokens.create(tx, ty, 'x2') as Phaser.Types.Physics.Arcade.ImageWithDynamicBody
+        token.setDepth(ty)
+        this.tweens.add({ targets: token, y: ty - 8, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        this.time.delayedCall(9000, () => {
+          if (token.active) this.tweens.add({ targets: token, alpha: 0.25, duration: 250, yoyo: true, repeat: 5 })
+        })
+        this.time.delayedCall(12000, () => token.active && token.destroy())
+      },
+    })
   }
 
   /** กล่องรางวัลใหญ่หล่นจากฟ้า — เก็บแล้วได้หลายรางวัล ทุกอย่างเป็นแบบพิเศษ */
@@ -1045,10 +1123,8 @@ export class GameScene extends Phaser.Scene {
       .explode(22)
     // รางวัลที่ 1: ยาพิเศษ — เลือดเต็มหลอด
     this.healPlayer(MAX_HP)
-    // รางวัลที่ 2: สมบัติโบนัส (RUSH ได้ ×2)
-    const bonus = this.rush ? 120 : 60
-    this.score += bonus
-    this.scoreText.setText(`สมบัติ: ${this.score}`)
+    // รางวัลที่ 2: สมบัติโบนัส (RUSH ได้ ×2 · เหรียญ ×2 คูณซ้อนอีก)
+    const bonus = this.addScore(this.rush ? 120 : 60)
     this.floatText(x, y - 44, `+${bonus}`, '#ffd460', 22)
     // รางวัลที่ 3: สกิลพิเศษสุ่ม — แรงกว่า นานกว่าของธรรมดา
     const specials: PowerType[] = ['gun', 'speed', 'shield', 'freeze']
@@ -1302,7 +1378,8 @@ export class GameScene extends Phaser.Scene {
     const spec = e.getData('spec') as EnemySpec
     if (spec.rageAnim) {
       const anim = on ? spec.rageAnim : spec.walkAnim
-      this.applySheet(e, this.animSheetKey(anim), spec.displayHeight)
+      // คงขนาดสุ่มของตัวนั้นไว้ตอนสลับร่างคลั่ง/ปกติ
+      this.applySheet(e, this.animSheetKey(anim), spec.displayHeight * ((e.getData('sizeMult') as number) ?? 1))
       if (this.power?.type !== 'freeze') e.play(anim)
     } else {
       if (on) e.setTint(0xffb0b0)
@@ -1435,8 +1512,10 @@ export class GameScene extends Phaser.Scene {
     e.setTexture(spec.deathSheet, spec.deathFrame)
     sfx(this, 'sfx-die', 0.5)
     voice(this, 'kill')
-    this.score += spec.score
-    this.scoreText.setText(`สมบัติ: ${this.score}`)
+    // คะแนนตามขนาดตัว — ตัวใหญ่ได้เยอะกว่า + ตัวเลขเด้งตรงจุดฆ่า
+    const sizeMult = (e.getData('sizeMult') as number) ?? 1
+    const pts = this.addScore(Math.round(spec.score * sizeMult))
+    this.floatText(e.x, e.y - e.displayHeight / 2 - 10, `+${pts}`, '#ffd460', sizeMult > 1.2 ? 22 : 17)
     this.tweens.add({
       targets: e,
       alpha: 0,
@@ -1452,6 +1531,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ----- helper -----
+
+  /** เพิ่มคะแนน — คูณ ×2 อัตโนมัติช่วงตัวคูณทำงาน คืนค่าที่ได้จริงไว้โชว์ตัวเลขเด้ง */
+  private addScore(base: number): number {
+    const total = this.time.now < this.scoreMultUntil ? base * 2 : base
+    this.score += total
+    this.scoreText.setText(`สมบัติ: ${this.score}`)
+    return total
+  }
 
   /** ตัวเลขลอย (ดาเมจ/ฮีล/แต้ม) — ลอยขึ้นแล้วจางหาย */
   private floatText(x: number, y: number, str: string, color: string, size = 18) {
@@ -1527,9 +1614,12 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = this.randomPointAwayFromPlayer(350)
     const sheet = this.animSheetKey(spec.walkAnim)
     const enemy = this.enemies.create(x, y, sheet, 0) as Enemy
+    // สุ่มขนาดตัว — ตัวใหญ่ให้คะแนนเยอะกว่าตอนฆ่า (hitbox ใหญ่ตาม ยิงง่ายขึ้นด้วย)
+    const sizeMult = Phaser.Math.FloatBetween(0.85, 1.45)
     enemy.setData('spec', spec)
     enemy.setData('hp', spec.hp)
-    this.applySheet(enemy, sheet, spec.displayHeight)
+    enemy.setData('sizeMult', sizeMult)
+    this.applySheet(enemy, sheet, spec.displayHeight * sizeMult)
     enemy.play(spec.walkAnim)
     enemy.setVelocity(Phaser.Math.Between(-80, 80), Phaser.Math.Between(-80, 80))
     enemy.setBounce(1, 1)
@@ -1656,6 +1746,13 @@ export class GameScene extends Phaser.Scene {
         `ด่าน ${this.stage} ${this.biomeName} · ${Math.floor(remain / 60)}:${String(remain % 60).padStart(2, '0')}`,
       )
     }
+
+    // ตัวจับเวลาเหรียญ ×2
+    this.multText.setText(
+      this.time.now < this.scoreMultUntil
+        ? `คะแนน ×2! ${Math.ceil((this.scoreMultUntil - this.time.now) / 1000)}s`
+        : '',
+    )
 
     if (this.power) {
       const left = this.power.until - this.time.now
