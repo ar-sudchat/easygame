@@ -3,11 +3,17 @@ import { BoardScene } from './scenes/BoardScene'
 import { GameScene } from './scenes/GameScene'
 import { SelectScene } from './scenes/SelectScene'
 
+// ขนาดเกมอิงสัดส่วนจอจริง — มือถือจอกว้างจะไม่เหลือแถบดำข้างจอ
+// สูงคงที่ 600 (พิกัด Y เดิมทั้งเกมใช้ได้) กว้างตามจอ: แคบสุด 4:3 (800) กว้างสุด 21:9 (1400)
+const HEIGHT = 600
+const aspect = Phaser.Math.Clamp(window.innerWidth / window.innerHeight, 4 / 3, 21 / 9)
+const WIDTH = Math.round((HEIGHT * aspect) / 2) * 2
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
-  width: 800,
-  height: 600,
+  width: WIDTH,
+  height: HEIGHT,
   backgroundColor: '#16213e',
   pixelArt: true,
   dom: { createContainer: true }, // ใช้ช่องกรอกชื่อบนบอร์ดอันดับ

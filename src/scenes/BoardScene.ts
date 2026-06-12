@@ -30,7 +30,7 @@ export class BoardScene extends Phaser.Scene {
     applyMute(this)
     playBgm(this, 'bgm-title')
     this.add
-      .text(400, 60, 'อันดับสูงสุด', { fontFamily: FONT, fontSize: '36px', color: '#ffffff' })
+      .text(this.scale.width / 2, 60, 'อันดับสูงสุด', { fontFamily: FONT, fontSize: '36px', color: '#ffffff' })
       .setOrigin(0.5)
 
     this.renderRows(currentBoard(), -1)
@@ -54,60 +54,62 @@ export class BoardScene extends Phaser.Scene {
   private renderRows(board: BoardEntry[], highlight: number) {
     for (const r of this.rows) r.destroy()
     this.rows = []
+    const cx = this.scale.width / 2
     const top = 120
     for (let i = 0; i < 5; i++) {
       const y = top + i * 62
       const entry = board[i]
       const isNew = i === highlight
       const bg = this.add
-        .rectangle(400, y, 520, 54, isNew ? 0x2f4858 : 0x1f2a40, 1)
+        .rectangle(cx, y, 520, 54, isNew ? 0x2f4858 : 0x1f2a40, 1)
         .setStrokeStyle(isNew ? 2 : 1, isNew ? 0x4ecca3 : 0x32425f)
       this.rows.push(bg)
       this.rows.push(
         this.add
-          .text(170, y, `${i + 1}`, { fontFamily: FONT, fontSize: '24px', color: '#ffd460' })
+          .text(cx - 230, y, `${i + 1}`, { fontFamily: FONT, fontSize: '24px', color: '#ffd460' })
           .setOrigin(0.5),
       )
       if (!entry) {
         this.rows.push(
           this.add
-            .text(400, y, '—', { fontFamily: FONT, fontSize: '20px', color: '#475569' })
+            .text(cx, y, '—', { fontFamily: FONT, fontSize: '20px', color: '#475569' })
             .setOrigin(0.5),
         )
         continue
       }
       const spec = specOf(entry.char)
-      const icon = this.add.sprite(225, y, spec.iconSheet, 0)
+      const icon = this.add.sprite(cx - 175, y, spec.iconSheet, 0)
       icon.setScale(46 / sheetOf(spec.iconSheet).frameHeight)
       this.rows.push(icon)
       this.rows.push(
         this.add
-          .text(260, y, entry.name, { fontFamily: FONT, fontSize: '20px', color: '#ffffff' })
+          .text(cx - 140, y, entry.name, { fontFamily: FONT, fontSize: '20px', color: '#ffffff' })
           .setOrigin(0, 0.5),
       )
       this.rows.push(
         this.add
-          .text(560, y, `${entry.score}`, { fontFamily: FONT, fontSize: '22px', color: '#ffd460' })
+          .text(cx + 160, y, `${entry.score}`, { fontFamily: FONT, fontSize: '22px', color: '#ffd460' })
           .setOrigin(1, 0.5),
       )
       this.rows.push(
         this.add
-          .text(640, y, `ด่าน ${entry.stage}`, { fontFamily: FONT, fontSize: '16px', color: '#9ca3af' })
+          .text(cx + 240, y, `ด่าน ${entry.stage}`, { fontFamily: FONT, fontSize: '16px', color: '#9ca3af' })
           .setOrigin(1, 0.5),
       )
     }
   }
 
   private askName(pending: Pending) {
+    const cx = this.scale.width / 2
     this.add
-      .text(400, 452, `ติดอันดับ! ได้ ${pending.score} แต้ม — พิมพ์ชื่อแล้วกด ENTER`, {
+      .text(cx, 452, `ติดอันดับ! ได้ ${pending.score} แต้ม — พิมพ์ชื่อแล้วกด ENTER`, {
         fontFamily: FONT,
         fontSize: '18px',
         color: '#4ecca3',
       })
       .setOrigin(0.5)
 
-    this.nameInput = this.add.dom(400, 495).createFromHTML(
+    this.nameInput = this.add.dom(cx, 495).createFromHTML(
       `<div style="display:flex; gap:8px; align-items:center;">
         <input id="player-name" maxlength="16" placeholder="ชื่อของคุณ" style="
           width: 220px; height: 38px; padding: 0 12px; font-size: 18px;
@@ -148,7 +150,7 @@ export class BoardScene extends Phaser.Scene {
 
   private offlineBadge() {
     this.add
-      .text(400, 92, 'ออฟไลน์ — คะแนนเก็บในเครื่องชั่วคราว', {
+      .text(this.scale.width / 2, 92, 'ออฟไลน์ — คะแนนเก็บในเครื่องชั่วคราว', {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#f6a821',
@@ -158,7 +160,7 @@ export class BoardScene extends Phaser.Scene {
 
   private showHint() {
     const btn = this.add
-      .text(400, 500, 'กลับหน้าเลือกตัวละคร (SPACE)', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' })
+      .text(this.scale.width / 2, 500, 'กลับหน้าเลือกตัวละคร (SPACE)', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' })
       .setOrigin(0.5)
       .setPadding(14, 8, 14, 8)
     btn.setBackgroundColor('#1f2a40')

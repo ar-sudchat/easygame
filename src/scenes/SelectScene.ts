@@ -39,13 +39,14 @@ export class SelectScene extends Phaser.Scene {
       })
     }
 
+    const cx = this.scale.width / 2
     this.add
-      .text(400, 80, 'เลือกตัวละคร', { fontFamily: FONT, fontSize: '40px', color: '#ffffff' })
+      .text(cx, 80, 'เลือกตัวละคร', { fontFamily: FONT, fontSize: '40px', color: '#ffffff' })
       .setOrigin(0.5)
 
     this.ring = this.add.graphics()
 
-    const positions = [145, 315, 485, 655]
+    const positions = [cx - 255, cx - 85, cx + 85, cx + 255]
     PLAYABLE.forEach((c, i) => {
       const def = sheetOf(c.iconSheet)
       const sprite = this.add.sprite(0, 0, c.iconSheet, 0)
@@ -66,14 +67,14 @@ export class SelectScene extends Phaser.Scene {
     })
 
     this.add
-      .text(400, 450, '← → เลือก · ENTER หรือแตะตัวละคร เพื่อเริ่ม', {
+      .text(cx, 450, '← → เลือก · ENTER หรือแตะตัวละคร เพื่อเริ่ม', {
         fontFamily: FONT,
         fontSize: '18px',
         color: '#9ca3af',
       })
       .setOrigin(0.5)
     const boardBtn = this.add
-      .text(400, 505, 'ดูอันดับสูงสุด (B)', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' })
+      .text(cx, 505, 'ดูอันดับสูงสุด (B)', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' })
       .setOrigin(0.5)
       .setPadding(14, 8, 14, 8)
     boardBtn.setBackgroundColor('#1f2a40')
@@ -87,7 +88,7 @@ export class SelectScene extends Phaser.Scene {
     applyMute(this)
     playBgm(this, 'bgm-title')
     const muteBtn = this.add
-      .text(770, 18, isMuted() ? 'เสียง: ปิด (M)' : 'เสียง: เปิด (M)', {
+      .text(this.scale.width - 30, 18, isMuted() ? 'เสียง: ปิด (M)' : 'เสียง: เปิด (M)', {
         fontFamily: FONT,
         fontSize: '15px',
         color: '#9ca3af',

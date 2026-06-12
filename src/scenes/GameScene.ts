@@ -121,7 +121,11 @@ export class GameScene extends Phaser.Scene {
   // ช่องเก็บสกิลแบบ hotbar — เก็บพลังจากกล่อง ? ไว้กดใช้ทีหลัง
   private slots: (PowerType | null)[] = [null, null, null, null, null]
   private slotIcons: Phaser.GameObjects.Image[] = []
-  private touch = { left: false, right: false, up: false, down: false }
+  // จอยสติ๊กลอยแบบ ROV — แตะซีกซ้ายจอแล้วลากนิ้วเป็นทิศทาง (analog)
+  private joyVec = new Phaser.Math.Vector2()
+  private joyPointerId = -1
+  private joyBase!: Phaser.GameObjects.Arc
+  private joyKnob!: Phaser.GameObjects.Arc
   // วงบีบ + บอส + สภาพแวดล้อม
   private zoneActive = false
   private zoneCenter = new Phaser.Math.Vector2()
@@ -184,7 +188,8 @@ export class GameScene extends Phaser.Scene {
     this.makeCoinTexture()
     this.slots = [null, null, null, null, null]
     this.slotIcons = []
-    this.touch = { left: false, right: false, up: false, down: false }
+    this.joyVec.set(0, 0)
+    this.joyPointerId = -1
     this.zoneActive = false
     this.enraged = false
     this.bossSpawned = false
@@ -202,7 +207,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H)
 
     this.ground = this.add
-      .tileSprite(400, 300, 800, 600, 'grass')
+      .tileSprite(this.scale.width / 2, 300, this.scale.width, 600, 'grass')
       .setTileScale(3)
       .setScrollFactor(0)
       .setDepth(-1)
@@ -315,7 +320,7 @@ export class GameScene extends Phaser.Scene {
     const mmW = 110
     const mmH = Math.round((mmW * WORLD_H) / WORLD_W)
     this.minimap = this.cameras
-      .add(800 - mmW - 12, 12, mmW, mmH)
+      .add(this.scale.width - mmW - 12, 12, mmW, mmH)
       .setZoom(mmW / WORLD_W)
       .setBackgroundColor(0x10241a)
     this.minimap.centerOn(WORLD_W / 2, WORLD_H / 2)
@@ -345,27 +350,28 @@ export class GameScene extends Phaser.Scene {
     this.powerText = this.hud(
       this.add.text(16, 40, '', { fontFamily: FONT, fontSize: '18px', color: '#ffd460' }),
     )
+    const hudCx = this.scale.width / 2
     this.stageText = this.hud(
       this.add
-        .text(400, 14, '', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' })
+        .text(hudCx, 14, '', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' })
         .setOrigin(0.5, 0),
     )
     this.rushText = this.hud(
       this.add
-        .text(400, 42, 'RUSH ×2!', { fontFamily: FONT, fontSize: '18px', color: '#ff6b6b' })
+        .text(hudCx, 42, 'RUSH ×2!', { fontFamily: FONT, fontSize: '18px', color: '#ff6b6b' })
         .setOrigin(0.5, 0)
         .setVisible(false),
     )
     this.zoneWarn = this.hud(
       this.add
-        .text(400, 70, 'อยู่นอกวง! รีบวิ่งเข้าวงฟ้า', { fontFamily: FONT, fontSize: '17px', color: '#ff6b6b' })
+        .text(hudCx, 70, 'อยู่นอกวง! รีบวิ่งเข้าวงฟ้า', { fontFamily: FONT, fontSize: '17px', color: '#ff6b6b' })
         .setOrigin(0.5, 0)
         .setVisible(false),
     )
     this.tweens.add({ targets: this.rushText, alpha: 0.25, duration: 380, yoyo: true, repeat: -1 })
 
     this.createHotbar()
-    this.createDpad()
+    this.createJoystick()
     this.applyBiome(0) // ด่าน 1 = ทุ่งหญ้าเสมอ
     this.setupHazards()
 
@@ -409,8 +415,11 @@ export class GameScene extends Phaser.Scene {
 
   private createJumpButton() {
     const isTouch = this.sys.game.device.input.touch
-    const btn = this.hud(this.add.circle(728, 506, 38, 0x1f2a40, 0.8).setStrokeStyle(2, 0x7d8db1))
-    const arrow = this.hud(this.add.image(728, 506, 'dpad-arrow').setScale(0.7).setAlpha(0.9))
+    // ปุ่มใหญ่มุมขวาล่างแบบปุ่มโจมตี ROV — สกิล 1-5 เรียงโค้งรอบปุ่มนี้ (ดู createHotbar)
+    const jx = this.scale.width - 72
+    const jy = 506
+    const btn = this.hud(this.add.circle(jx, jy, 44, 0x1f2a40, 0.8).setStrokeStyle(2, 0x7d8db1))
+    const arrow = this.hud(this.add.image(jx, jy, 'dpad-arrow').setScale(0.8).setAlpha(0.9))
     btn.setVisible(isTouch)
     arrow.setVisible(isTouch)
     btn.setInteractive({ useHandCursor: true })
@@ -481,11 +490,25 @@ export class GameScene extends Phaser.Scene {
 
   private createHotbar() {
     const size = 46
-    const gap = 6
-    const startX = 400 - ((size + gap) * 5 - gap) / 2 + size / 2
-    const y = 566
+    const W = this.scale.width
+    // จอสัมผัส: สกิลเรียงโค้งรอบปุ่มกระโดดมุมขวาล่าง (แบบ ROV นิ้วโป้งขวาเอื้อมถึงหมด)
+    // เดสก์ท็อป: แถวตรงกลางล่าง กดเลข 1-5
+    const spots: { x: number; y: number }[] = []
+    if (this.sys.game.device.input.touch) {
+      const cx = W - 72
+      const cy = 506
+      const r = 124
+      for (let i = 0; i < 5; i++) {
+        const ang = Math.PI + (i * (Math.PI / 2)) / 4 // กวาด 180° → 270° (ซ้ายของปุ่ม → เหนือปุ่ม)
+        spots.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r })
+      }
+    } else {
+      const gap = 6
+      const startX = W / 2 - ((size + gap) * 5 - gap) / 2 + size / 2
+      for (let i = 0; i < 5; i++) spots.push({ x: startX + i * (size + gap), y: 566 })
+    }
     for (let i = 0; i < 5; i++) {
-      const x = startX + i * (size + gap)
+      const { x, y } = spots[i]
       const bg = this.hud(
         this.add
           .rectangle(x, y, size, size, 0x1f2a40, 0.85)
@@ -516,36 +539,40 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
-  private createDpad() {
-    // โชว์เฉพาะเครื่องจอสัมผัส (desktop ใช้คีย์บอร์ด)
-    const isTouch = this.sys.game.device.input.touch
-    const cx = 92
-    const cy = 488
-    const off = 46
-    type Dir = 'left' | 'right' | 'up' | 'down'
-    const dirs: { key: Dir; x: number; y: number; angle: number }[] = [
-      { key: 'up', x: cx, y: cy - off, angle: 0 },
-      { key: 'down', x: cx, y: cy + off, angle: 180 },
-      { key: 'left', x: cx - off, y: cy, angle: 270 },
-      { key: 'right', x: cx + off, y: cy, angle: 90 },
-    ]
-    for (const d of dirs) {
-      const btn = this.hud(
-        this.add.image(d.x, d.y, 'dpad-arrow').setAngle(d.angle).setAlpha(0.55),
-      )
-      btn.setVisible(isTouch)
-      btn.setInteractive({ useHandCursor: true })
-      btn.on('pointerdown', () => {
-        this.touch[d.key] = true
-        btn.setAlpha(0.95)
-      })
-      const release = () => {
-        this.touch[d.key] = false
-        btn.setAlpha(0.55)
-      }
-      btn.on('pointerup', release)
-      btn.on('pointerout', release)
+  private createJoystick() {
+    // จอยสติ๊กลอยแบบ ROV — เฉพาะจอสัมผัส: แตะซีกซ้ายจอตรงไหนก็ได้ ฐานจะมาอยู่ใต้นิ้ว แล้วลากเป็นทิศ
+    if (!this.sys.game.device.input.touch) return
+    const R = 58
+    this.joyBase = this.hud(this.add.circle(0, 0, R, 0x1f2a40, 0.4).setStrokeStyle(2, 0x7d8db1, 0.7))
+    this.joyKnob = this.hud(this.add.circle(0, 0, 26, 0xaebadb, 0.85))
+    this.joyBase.setVisible(false)
+    this.joyKnob.setVisible(false)
+    this.input.on(
+      'pointerdown',
+      (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        if (over.length || this.joyPointerId !== -1) return // กดโดนปุ่ม UI อยู่ ไม่ใช่จอย
+        if (p.x > this.scale.width * 0.55) return // ซีกขวาสงวนให้ปุ่มกระโดด/สกิล
+        this.joyPointerId = p.id
+        this.joyBase.setPosition(p.x, p.y).setVisible(true)
+        this.joyKnob.setPosition(p.x, p.y).setVisible(true)
+      },
+    )
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.id !== this.joyPointerId) return
+      const v = new Phaser.Math.Vector2(p.x - this.joyBase.x, p.y - this.joyBase.y)
+      if (v.length() > R) v.setLength(R)
+      this.joyKnob.setPosition(this.joyBase.x + v.x, this.joyBase.y + v.y)
+      this.joyVec.set(v.x / R, v.y / R)
+    })
+    const release = (p: Phaser.Input.Pointer) => {
+      if (p.id !== this.joyPointerId) return
+      this.joyPointerId = -1
+      this.joyVec.set(0, 0)
+      this.joyBase.setVisible(false)
+      this.joyKnob.setVisible(false)
     }
+    this.input.on('pointerup', release)
+    this.input.on('pointerupoutside', release)
   }
 
   // ----- sheet/ขนาด -----
@@ -854,9 +881,10 @@ export class GameScene extends Phaser.Scene {
 
     this.weatherFx?.destroy()
     this.weatherFx = null
+    const W = this.scale.width
     if (b.fx === 'snow') {
       this.weatherFx = this.add.particles(0, 0, 'dot', {
-        x: { min: 0, max: 800 },
+        x: { min: 0, max: W },
         y: -10,
         lifespan: 7000,
         speedY: { min: 25, max: 70 },
@@ -867,7 +895,7 @@ export class GameScene extends Phaser.Scene {
       })
     } else if (b.fx === 'ember') {
       this.weatherFx = this.add.particles(0, 0, 'dot', {
-        x: { min: 0, max: 800 },
+        x: { min: 0, max: W },
         y: 610,
         lifespan: 5000,
         speedY: { min: -70, max: -30 },
@@ -879,7 +907,7 @@ export class GameScene extends Phaser.Scene {
       })
     } else if (b.fx === 'rain') {
       this.weatherFx = this.add.particles(0, 0, 'dot', {
-        x: { min: -50, max: 850 },
+        x: { min: -50, max: W + 50 },
         y: -10,
         lifespan: 1600,
         speedY: { min: 380, max: 480 },
@@ -952,7 +980,7 @@ export class GameScene extends Phaser.Scene {
     const ty = Phaser.Math.Clamp(this.player.y + Phaser.Math.Between(-160, 160), 60, WORLD_H - 60)
     const banner = this.hud(
       this.add
-        .text(400, 110, 'กล่องรางวัลใหญ่หล่นลงมา!', { fontFamily: FONT, fontSize: '24px', color: '#ffd460', stroke: '#0f172a', strokeThickness: 4 })
+        .text(this.scale.width / 2, 110, 'กล่องรางวัลใหญ่หล่นลงมา!', { fontFamily: FONT, fontSize: '24px', color: '#ffd460', stroke: '#0f172a', strokeThickness: 4 })
         .setOrigin(0.5),
     )
     this.tweens.add({ targets: banner, alpha: 0, delay: 1800, duration: 700, onComplete: () => banner.destroy() })
@@ -1244,7 +1272,7 @@ export class GameScene extends Phaser.Scene {
     }
     const banner = this.hud(
       this.add
-        .text(400, 200, `ด่าน ${n} · ${this.biomeName}!`, { fontFamily: FONT, fontSize: '44px', color: '#ffd460' })
+        .text(this.scale.width / 2, 200, `ด่าน ${n} · ${this.biomeName}!`, { fontFamily: FONT, fontSize: '44px', color: '#ffd460' })
         .setOrigin(0.5),
     )
     this.tweens.add({ targets: banner, alpha: 0, duration: 1600, onComplete: () => banner.destroy() })
@@ -1519,14 +1547,15 @@ export class GameScene extends Phaser.Scene {
     this.player.stop()
     this.player.setTint(0x888888)
     for (const e of this.enemies.getChildren() as Phaser.GameObjects.Sprite[]) e.stop()
+    const cx = this.scale.width / 2
     this.hud(
       this.add
-        .text(400, 240, 'จบเกม!', { fontFamily: FONT, fontSize: '48px', color: '#e94560' })
+        .text(cx, 240, 'จบเกม!', { fontFamily: FONT, fontSize: '48px', color: '#e94560' })
         .setOrigin(0.5),
     )
     this.hud(
       this.add
-        .text(400, 295, `ได้สมบัติ ${this.score} · ถึงด่าน ${this.stage}`, {
+        .text(cx, 295, `ได้สมบัติ ${this.score} · ถึงด่าน ${this.stage}`, {
           fontFamily: FONT,
           fontSize: '20px',
           color: '#ffffff',
@@ -1536,7 +1565,7 @@ export class GameScene extends Phaser.Scene {
     if (qualifies(this.score)) {
       this.hud(
         this.add
-          .text(400, 327, 'ติดอันดับสูงสุด!', { fontFamily: FONT, fontSize: '18px', color: '#4ecca3' })
+          .text(cx, 327, 'ติดอันดับสูงสุด!', { fontFamily: FONT, fontSize: '18px', color: '#4ecca3' })
           .setOrigin(0.5),
       )
     }
@@ -1547,9 +1576,9 @@ export class GameScene extends Phaser.Scene {
           ? { score: this.score, char: this.spec.key, stage: this.stage }
           : undefined,
       })
-    this.textButton(255, 375, 'เริ่มใหม่ (SPACE)', () => this.scene.restart())
-    this.textButton(430, 375, 'ตัวละคร (C)', () => this.scene.start('select'))
-    this.textButton(575, 375, qualifies(this.score) ? 'ใส่ชื่อ (B)' : 'อันดับ (B)', goBoard)
+    this.textButton(cx - 145, 375, 'เริ่มใหม่ (SPACE)', () => this.scene.restart())
+    this.textButton(cx + 30, 375, 'ตัวละคร (C)', () => this.scene.start('select'))
+    this.textButton(cx + 175, 375, qualifies(this.score) ? 'ใส่ชื่อ (B)' : 'อันดับ (B)', goBoard)
     this.input.keyboard!.once('keydown-SPACE', () => this.scene.restart())
     this.input.keyboard!.once('keydown-C', () => this.scene.start('select'))
     this.input.keyboard!.once('keydown-B', goBoard)
@@ -1643,21 +1672,27 @@ export class GameScene extends Phaser.Scene {
       this.spec.speed *
       (this.power?.type === 'speed' ? (this.power.special ? 2.2 : 1.7) : 1) *
       this.biomeSpeedMult
-    const left = this.cursors.left.isDown || this.wasd.left.isDown || this.touch.left
-    const right = this.cursors.right.isDown || this.wasd.right.isDown || this.touch.right
-    const up = this.cursors.up.isDown || this.wasd.up.isDown || this.touch.up
-    const down = this.cursors.down.isDown || this.wasd.down.isDown || this.touch.down
+    const left = this.cursors.left.isDown || this.wasd.left.isDown
+    const right = this.cursors.right.isDown || this.wasd.right.isDown
+    const up = this.cursors.up.isDown || this.wasd.up.isDown
+    const down = this.cursors.down.isDown || this.wasd.down.isDown
+    const joyOn = this.joyVec.lengthSq() > 0.02 // deadzone กันนิ้วสั่น
 
     // ตอนโดนตีจะกระเด็น — อย่าทับ velocity ถ้าเพิ่งโดน (300ms แรกของช่วงอมตะ)
     const knockedBack = this.time.now < this.invulnUntil - 900
     if (!knockedBack) {
-      this.player.setVelocity(
-        (right ? speed : 0) - (left ? speed : 0),
-        (down ? speed : 0) - (up ? speed : 0),
-      )
+      if (joyOn) {
+        // จอยสติ๊ก: ทิศ + ความแรงตามระยะลาก (เดินช้า/วิ่งเร็วได้ในตัว)
+        this.player.setVelocity(this.joyVec.x * speed, this.joyVec.y * speed)
+      } else {
+        this.player.setVelocity(
+          (right ? speed : 0) - (left ? speed : 0),
+          (down ? speed : 0) - (up ? speed : 0),
+        )
+      }
     }
 
-    const moving = left || right || up || down
+    const moving = left || right || up || down || joyOn
     if (!this.acting) {
       const walkSheet = this.animSheetKey(this.spec.walkAnim)
       if (this.player.texture.key !== walkSheet) {
@@ -1670,8 +1705,8 @@ export class GameScene extends Phaser.Scene {
         this.player.setFrame(0)
       }
     }
-    if (left) this.player.setFlipX(this.spec.facing === 'right')
-    if (right) this.player.setFlipX(this.spec.facing === 'left')
+    if (left || (joyOn && this.joyVec.x < -0.1)) this.player.setFlipX(this.spec.facing === 'right')
+    if (right || (joyOn && this.joyVec.x > 0.1)) this.player.setFlipX(this.spec.facing === 'left')
 
     if (this.power?.type !== 'freeze') {
       const mult = this.enemySpeedMult()
