@@ -1,0 +1,23 @@
+{
+  "name": "game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "start": "node server/index.mjs",
+    "server": "node server/index.mjs",
+    "db:migrate": "psql -d easygame -f server/schema.sql"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.21.0",
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
